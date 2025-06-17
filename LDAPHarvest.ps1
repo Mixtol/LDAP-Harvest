@@ -383,11 +383,11 @@ function Get-DomainControllers {
         elseif ($lastActiveDC) {
             return $lastActiveDC
         }
-        Write-Warning "Active controller not found for $DomainName : $_"
+        Write-Host "Active controller not found for $DomainName : $_" -ForegroundColor Red
         return $null
     }
     catch {
-        Write-Warning "Get-ADDomainController failed for $DomainName : $_"
+        Write-Host "Get-ADDomainController failed for $DomainName : $_" -ForegroundColor Red
         return $null
     }
 }
@@ -422,7 +422,7 @@ function Get-DomainComputers {
     try {
         $computers = Get-ADComputer @params
         if (-not $computers) {
-            Write-Warning "No computers found on $($params.SearchBase) Filter: $($params.Filter)"
+            Write-Host "No computers found on $($params.SearchBase) Filter: $($params.Filter)" -ForegroundColor Red
             return
         }
         $computers | ForEach-Object {
@@ -608,7 +608,7 @@ try {
             }
         }
         catch {
-            Write-Warning "Cannot get DC for $($domain.Name) : $_"
+            Write-Host "Cannot get DC for $($domain.Name) : $_" -ForegroundColor Red
         }
     }
     # 4. Getting comps and user from 1 dc from each domain
@@ -628,7 +628,7 @@ try {
             }
         }
         catch {
-            Write-Warning "Error getting data from Server: $($dc.HostName) on Domain: $($dc.Domain)"
+            Write-Host "Error getting data from Server: $($dc.HostName) on Domain: $($dc.Domain)" -ForegroundColor Red
         }
     }
 }
