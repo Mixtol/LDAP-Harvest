@@ -332,6 +332,7 @@ function Get-DomainControllers {
         $allDCs = Get-ADDomainController @params
         $lastActiveGC = $null
         $lastActiveDC = $null
+        
         # Process all DCs and find last active GC
         $allDCs | ForEach-Object {
             $dc = $_
@@ -349,20 +350,43 @@ function Get-DomainControllers {
                 domainName    = if ($DomainName) { $DomainName.ToLower() } else { '' }
             } | Protect-Pii | Write-CollectorEvent
 
-            if ($dc.Enabled){
+            # Сохраняем последний включенный DC на случай, если не найдем рабочий GC
+            if ($dc.Enabled) {
                 $lastActiveDC = $dc
-                if ($dc.IsGlobalCatalog) {
+            }
+        }
+
+        # Looking for DC
+        foreach ($dc in $allDCs) {
+            if ($dc.IsGlobalCatalog -and $dc.Enabled) {
+                try {
+                    # Checking 389 (LDAP) or 636 (LDAPS)
+                    $port389 = Test-NetConnection -ComputerName $dc.HostName -Port 389 -ErrorAction SilentlyContinue
+                    $port636 = Test-NetConnection -ComputerName $dc.HostName -Port 636 -ErrorAction SilentlyContinue
+                    
+                    if ($port389.TcpTestSucceeded -or $port636.TcpTestSucceeded) {
+                        # Found working GC
+                        Write-DebugMsg "Found avalible GC $($dc.HostName) from $DomainName"
+                        return $dc
+                    }
                     $lastActiveGC = $dc
+                }
+                catch {
+                    Write-Warning "Connection test failed for GC $($dc.HostName): $_"
                 }
             }
         }
+        Write-Warning "Controller didnt pass TNC $($dc.HostName): $_"
         if ($lastActiveGC) {
             return $lastActiveGC
         }
-        else {
+        elseif ($lastActiveDC) {
             return $lastActiveDC
         }
-    } catch {
+        Write-Warning "Active controller not found for $DomainName : $_"
+        return $null
+    }
+    catch {
         Write-Warning "Get-ADDomainController failed for $DomainName : $_"
         return $null
     }
@@ -378,7 +402,7 @@ function Get-DomainComputers {
         [pscredential]$Credential
     )
     
-    Write-DebugMsg "Querying computers in $DomainName"
+    Write-DebugMsg "Querying computers in $DomainName from $Server"
     $params = @{ 
         SearchBase = MakeDNSFilter $DomainName
         ResultSetSize = $null
@@ -398,7 +422,7 @@ function Get-DomainComputers {
     try {
         $computers = Get-ADComputer @params
         if (-not $computers) {
-            Write-Warning "No computers found with the specified parameters!"
+            Write-Warning "No computers found on $($params.SearchBase) Filter: $($params.Filter)"
             return
         }
         $computers | ForEach-Object {
@@ -425,11 +449,11 @@ function Get-DomainComputers {
                     lastLogon          = Convert-FileTime $_.lastLogonTimestamp
                 } | Protect-Pii | Write-CollectorEvent
             } catch {
-                Write-Error "Error processing $_ : $params"
+                Write-Warning "Error processing $_ : $params"
             }
         }
     } catch {
-        Write-Error "Get-ADComputer failed for $DomainName : $_"
+        Write-Warning "Get-ADComputer failed for $DomainName : $_"
     }
 }
 
@@ -444,7 +468,7 @@ function Get-DomainUsers {
         [pscredential]$Credential
     )
     begin {
-        Write-DebugMsg "Starting user enumeration in domain: $DomainName"
+        Write-DebugMsg "Starting user enumeration in domain: $DomainName from $Server"
     }
     process {
         $params = @{
@@ -478,8 +502,8 @@ function Get-DomainUsers {
 
         try {
             $users = Get-ADUser @params
-            if (-not $computers) {
-                Write-Warning "No users found with the specified parameters!"
+            if (-not $users) {
+                Write-Warning "No users found in $($params.SearchBase) Filter: $($params.Filter)"
                 return
             }
             $users | ForEach-Object {
@@ -576,10 +600,9 @@ try {
     # 3. Getting DC for all domains
     foreach ($domain in $allDomains) {
         try {
-            $domainControllers = Get-DomainControllers -DomainName $domain.Name -ErrorAction Stop
-            # Global Catalog
-            foreach ($dc in $domainControllers) {
-                if ($dc.IsGlobalCatalog -eq $true) {
+            $domainController = Get-DomainControllers -DomainName $domain.Name -ErrorAction Stop
+            foreach ($dc in $domainController) {
+                if ($dc) {
                     $allControllers += $dc
                 }
             }
@@ -605,7 +628,7 @@ try {
             }
         }
         catch {
-        Write-Warning "Error getting data from $($dc.HostName) : $_"
+            Write-Warning "Error getting data from Server: $($dc.HostName) on Domain: $($dc.Domain)"
         }
     }
 }
