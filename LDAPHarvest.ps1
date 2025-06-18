@@ -10,9 +10,9 @@ SYNOPSIS
 EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File .\LDAPHarvest.ps1 `
         -CollectorAddress 11.62.10.1 -CollectorPort 6000 -MaxEPS 1000 `
-        -ShowPII -Verbose -Debug `
+        -ShowPII -Verbose -DebugMode `
         -AdditionalDC "dc1.example.com", "dc2.example.com" `
-        -ForceUnencrypted -Debug
+        -ForceUnencrypted
 #>
 
 [CmdletBinding()]
@@ -422,7 +422,7 @@ function Get-DomainComputers {
     try {
         $computers = Get-ADComputer @params
         if (-not $computers) {
-            Write-Host "No computers found on $($params.SearchBase) Filter: $($params.Filter)" -ForegroundColor Red
+            Write-Warning "No computers found on $($params.SearchBase) Filter: $($params.Filter)"
             return
         }
         $computers | ForEach-Object {
