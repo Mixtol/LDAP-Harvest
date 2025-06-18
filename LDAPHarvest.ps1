@@ -3,7 +3,6 @@ SYNOPSIS
     Collect computers,user, DC objects from the current Active Directory forest **and** from any
     additional forests reachable via given domain controllers, then stream each object as a
     single compressed JSON line to a Collector TCP collector with SSL. Throttled by -MaxEPS.
-
     * Works in **Windows PowerShell 5** and **PowerShell 7** (no parallel pipeline).
     * Requires only the **ActiveDirectory** RSAT module.
 
