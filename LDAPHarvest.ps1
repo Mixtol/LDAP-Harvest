@@ -316,6 +316,7 @@ function Get-ForestDomains {
 function Get-DomainControllers {
     param(
         [string]$DomainName
+        [string]$DomainName
     )
 
     Write-DebugMsg "Querying DCs in $DomainName"
