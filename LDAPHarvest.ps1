@@ -5,13 +5,14 @@ SYNOPSIS
     single compressed JSON line to a Collector TCP collector with SSL. Throttled by -MaxEPS.
     * Works in **Windows PowerShell 5** and **PowerShell 7** (no parallel pipeline).
     * Requires only the **ActiveDirectory** RSAT module.
-
+    * To get $Creds use $Creds=Get-Credential AND Then donf forgot to clear var!!!
 EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File .\LDAPHarvest.ps1 `
         -CollectorAddress 11.62.10.1 -CollectorPort 6000 -MaxEPS 1000 `
-        -ShowPII -Verbose -DebugMode `
+        -ForceUnencrypted `
+        -ShowPII -DebugMode `
         -AdditionalDC "dc1.example.com", "dc2.example.com" `
-        -ForceUnencrypted
+        -Credential $Creds
 #>
 
 [CmdletBinding()]
@@ -314,8 +315,7 @@ function Get-ForestDomains {
 # ――― DOMAIN CONTROLLER ENUMERATION ―――
 function Get-DomainControllers {
     param(
-        [string]$DomainName,
-        [pscredential]$Credential
+        [string]$DomainName
     )
 
     Write-DebugMsg "Querying DCs in $DomainName"
@@ -375,7 +375,7 @@ function Get-DomainControllers {
                 }
             }
         }
-        Write-Warning "Controller didnt pass TNC $($dc.HostName): $_"
+        Write-Warning "Controller didnt pass TNC $($dc.HostName)"
         if ($lastActiveGC) {
             return $lastActiveGC
         }
@@ -397,8 +397,7 @@ function Get-DomainComputers {
         [string]$Server,
         [string]$DomainName,
         [string]$Forest,
-        [string]$Filter,
-        [pscredential]$Credential
+        [string]$Filter
     )
     
     Write-DebugMsg "Querying computers in $DomainName from $Server"
@@ -463,8 +462,7 @@ function Get-DomainUsers {
         [string]$Server,
         [string]$DomainName,
         [string]$Forest,
-        [string]$Filter,
-        [pscredential]$Credential
+        [string]$Filter
     )
     begin {
         Write-DebugMsg "Starting user enumeration in domain: $DomainName from $Server"
