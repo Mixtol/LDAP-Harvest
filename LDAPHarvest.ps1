@@ -315,8 +315,7 @@ function Get-ForestDomains {
 # ――― DOMAIN CONTROLLER ENUMERATION ―――
 function Get-DomainControllers {
     param(
-        [string]$DomainName,
-        [pscredential]$Credential
+        [string]$DomainName
     )
 
     Write-DebugMsg "Querying DCs in $DomainName"
@@ -399,7 +398,6 @@ function Get-DomainComputers {
         [string]$DomainName,
         [string]$Forest,
         [string]$Filter,
-        [pscredential]$Credential
     )
     
     Write-DebugMsg "Querying computers in $DomainName from $Server"
@@ -465,7 +463,6 @@ function Get-DomainUsers {
         [string]$DomainName,
         [string]$Forest,
         [string]$Filter,
-        [pscredential]$Credential
     )
     begin {
         Write-DebugMsg "Starting user enumeration in domain: $DomainName from $Server"
