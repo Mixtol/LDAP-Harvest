@@ -202,7 +202,7 @@ function CollectorSocket {
     $tcp = $null
     $sslStream = $null
     try {
-        Write-DebugMsg "Creating TCP session"
+        Write-DebugMsg "Establishing TCP session"
         $tcp = New-Object System.Net.Sockets.TcpClient
         $tcp.SendTimeout = $TimeoutMilliseconds
         $tcp.ReceiveTimeout = $TimeoutMilliseconds
@@ -215,7 +215,7 @@ function CollectorSocket {
         }
         Write-DebugMsg "Trying to encript session"
         if (-not $ForceUnencrypted) {
-            Write-DebugMsg "Encriptions turned on"
+            Write-DebugMsg "Encryption turned on"
             try {
                 $sslStream = New-Object System.Net.Security.SslStream(
                     $tcp.GetStream(),
@@ -246,7 +246,7 @@ function CollectorSocket {
             }
         }
         # Start no encryption connection
-        Write-DebugMsg "Encriptions turned off"
+        Write-DebugMsg "Encryption turned off"
         $writer = New-Object System.IO.StreamWriter($tcp.GetStream(), [Text.Encoding]::UTF8)
         $writer.AutoFlush = $true
 
@@ -283,7 +283,7 @@ function Write-CollectorEvent {
     }
 }
 
-# ──────────────────────── FOREST / DOMAINS ──────────────────
+# ──────────────────────── FOREST / DOMAINS ────────────────────────────────────
 function Get-ForestDomains {
     param(
         [string]$Server # DC
@@ -312,7 +312,7 @@ function Get-ForestDomains {
     }
 }
 
-# ――― DOMAIN CONTROLLER ENUMERATION ―――
+# ────────────────── DOMAIN CONTROLLER ENUMERATION ──────────────────
 function Get-DomainControllers {
     param(
         [string]$DomainName
@@ -474,22 +474,11 @@ function Get-DomainUsers {
             ResultSetSize = $null
             ResultPageSize = 2000
             Properties = @(
-                'SamAccountName', 'UserPrincipalName', 'Name', 'DisplayName',
-                'GivenName', 'Surname', 'Initials', 'Description',
-                'EmailAddress', 'Mail', 'Mobile', 'MobilePhone',
-                'StreetAddress', 'City', 'CN', 'Country',
-                'Company', 'Title', 'Office',
-                'Manager', 'DirectReports', 'MemberOf', 'PrimaryGroup',
-                'AccountExpirationDate', 'AccountLockoutTime',
-                'BadLogonCount', 'LastBadPasswordAttempt',
-                'LogonCount', 'PasswordExpired', 'PasswordLastSet',
-                'PasswordNeverExpires', 'PasswordNotRequired',
-                'SmartcardLogonRequired', 'TrustedForDelegation',
-                'TrustedToAuthForDelegation', 'CannotChangePassword',
-                'DoesNotRequirePreAuth', 'Enabled', 'Created',
-                'Modified', 'LastLogonDate', 'userAccountControl',
-                'SID', 'DistinguishedName', 'whenCreated',
-                'pwdLastSet', 'lastLogonTimestamp'
+                'SamAccountName', 'UserPrincipalName',
+                'DistinguishedName','CN', 'MemberOf',
+                'userAccountControl', 'SID', 'Enabled',
+                'whenCreated', 'Modified', 'pwdLastSet',
+                'lastLogonTimestamp', 'LastBadPasswordAttempt'
             )
         }
 
@@ -506,48 +495,36 @@ function Get-DomainUsers {
             $users | ForEach-Object {
                 try {
                     $flags = Convert-UAC -UACValue $_.userAccountControl
-                    $managerName = if ($_.Manager) { 
-                        ($_.Manager -split ',')[0] -replace 'CN=' 
-                    } else { $null }
-
+                    $memberOfNames = @()
+                    if ($_.MemberOf) {
+                        $memberOfNames = $_.MemberOf |
+                            ForEach-Object {
+                                $first = ($_ -split ',', 2)[0]
+                                if ($first -like 'CN=*') { $first.Substring(3) } else { $first }
+                            } |
+                            Where-Object { $_ } |
+                            ForEach-Object { $_.ToLowerInvariant() } |
+                            Sort-Object -Unique
+                    }
+                    $memberOfCompact = ($memberOfNames -join '|')
+                    $memberOfCount   = $memberOfNames.Count
                     [pscustomobject]@{
                         source             = 'UserHarvest'
-                        samAccountName     = if ($_.SamAccountName) { $_.SamAccountName.ToLower() } else { $null }
-                        userPrincipalName  = $_.UserPrincipalName
-                        name               = $_.Name
-                        displayName        = $_.DisplayName
-                        description        = $_.Description
-                        mail               = if ($_.Mail) { $_.Mail.ToLower() } else { $null }
-                        mobile             = $_.Mobile -or $_.MobilePhone
-                        address            = @{
-                            street  = $_.StreetAddress
-                            city    = $_.City
-                            zip     = $_.PostalCode
-                            country = $_.Country
-                        }
-                        organization       = @{
-                            company    = $_.Company
-                            title      = $_.Title
-                            office     = $_.Office
-                        }
-                        manager            = $managerName
-                        primaryGroup       = $_.PrimaryGroup
-                        sid                = $_.SID.Value
                         domainName         = if ($DomainName) { $DomainName.ToLower() } else { $null }
                         forest             = if ($Forest) { $Forest.ToLower() } else { $null }
+                        samAccountName     = if ($_.SamAccountName) { $_.SamAccountName.ToLower() } else { $null }
+                        userPrincipalName  = $_.UserPrincipalName
+                        distinguishedName  = $_.DistinguishedName
+                        sid                = $_.SID.Value
                         uac                = $_.userAccountControl
                         uacFlags           = $flags
-                        distinguishedName  = $_.DistinguishedName
                         enabled            = $_.Enabled
-                        accountExpires     = if ($_.AccountExpirationDate) { $_.AccountExpirationDate.ToString('o') } else { 'NEVER' }
-                        passwordExpires    = Convert-FileTime $_.'msDS-UserPasswordExpiryTimeComputed'
-                        whenCreated        = $_.whenCreated.ToUniversalTime().ToString('o')
-                        lastLogon          = Convert-FileTime $_.lastLogonTimestamp
-                        lastLogonDate      = if ($_.LastLogonDate) { $_.LastLogonDate.ToString('o') } else { '' }
-                        badLogonCount      = $_.BadLogonCount
-                        logonCount         = $_.LogonCount
                         passwordLastSet    = Convert-FileTime $_.pwdLastSet
+                        lastLogon          = Convert-FileTime $_.lastLogonTimestamp
+                        whenCreated        = $_.whenCreated.ToUniversalTime().ToString('o')
                         lastModified       = if ($_.Modified) { $_.Modified.ToString('o') } else { '' }
+                        memberOf           = $memberOfCompact
+                        memberOfCount      = $memberOfCount
                     } | Protect-Pii | Write-CollectorEvent
                 }
                 catch {
@@ -620,14 +597,16 @@ try {
                     ErrorAction = 'Stop'
                     Filter = $f.Filter
                 }
-                Get-DomainComputers @params
+                # Main enrichmentd functions
                 Get-DomainUsers @params
+                Get-DomainComputers @params
             }
         }
         catch {
-            Write-Host "Error getting data from Server: $($dc.HostName) on Domain: $($dc.Domain)" -ForegroundColor Red
+            Write-Host "Error getting data from Server=$($dc.HostName) on Domain=$($dc.Domain)" -ForegroundColor Red
         }
     }
+    Write-Host "All harvest events sent" -ForegroundColor Green
 }
 finally {
     if ($null -ne $socket) {
